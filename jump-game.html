@@ -659,6 +659,7 @@ let nextDir=true;
 let platCount=0;
 let sameDirCount=0;
 let fallVelocity=0, fallDrop=0, fallOpacity=1;
+let fallRotation=0, fallRotSpeed=0, fallTiltDir=1, fallLateral=0, fallLateralSpeed=0;
 let maxCombo=0, scoreScale=1, scoreScaleV=0;
 let comboScale=1, comboScaleV=0, comboBgFlash=0;
 
@@ -769,6 +770,7 @@ function init(){
   popups=[]; particles=[]; platCount=0; sameDirCount=0;
   nextDir=Math.random()>0.5;
   fallVelocity=0; fallDrop=0; fallOpacity=1;
+  fallRotation=0; fallRotSpeed=0; fallTiltDir=1; fallLateral=0; fallLateralSpeed=0;
   maxCombo=0; scoreScale=1; scoreScaleV=0;
   comboScale=1; comboScaleV=0; comboBgFlash=0;
   
@@ -1324,6 +1326,7 @@ function getPlayerScreenPos(cx, cy){
   
   if(state==='fall'){
     footY += fallDrop;
+    footX += fallLateral;
   }
   
   return {footX, footY};
@@ -1349,6 +1352,11 @@ function drawPlayer(cx, cy){
   
   if(state==='fall'){
     ctx.globalAlpha = fallOpacity;
+    // Apply tumble rotation around the player's center
+    const centerY = fy - ph * 0.5;
+    ctx.translate(fx, centerY);
+    ctx.rotate(fallRotation);
+    ctx.translate(-fx, -centerY);
   }
   
   if(leanAngle !== 0){
@@ -1659,6 +1667,20 @@ function triggerFall(){
   fallDrop = 0;
   fallOpacity = 1;
   fallT = 0;
+  // Tilt direction: based on jump overshoot direction, with some randomness
+  fallTiltDir = (Math.random() > 0.5 ? 1 : -1);
+  // If we have jump direction info, tilt in that direction
+  if(jumpToW && jumpFromW){
+    const dx = jumpToW.wx - jumpFromW.wx;
+    const dy = jumpToW.wy - jumpFromW.wy;
+    // Convert world direction to screen tilt
+    const screenDir = dx - dy; // positive = tilting right in screen space
+    if(Math.abs(screenDir) > 0.1) fallTiltDir = screenDir > 0 ? 1 : -1;
+  }
+  fallRotation = 0;
+  fallRotSpeed = fallTiltDir * (3 + Math.random() * 2); // 3-5 rad/s initial angular velocity
+  fallLateral = 0;
+  fallLateralSpeed = fallTiltDir * (20 + Math.random() * 15); // slight lateral drift
   shake = 2;
   stopCharge();
   playFall();
@@ -1863,8 +1885,15 @@ function loop(ts){
     fallT += dt;
     fallVelocity += FALL_GRAVITY * dt;
     fallDrop += fallVelocity * dt;
-    fallOpacity = Math.max(0, 1 - fallDrop / 150);
-    if(fallDrop > 200){
+    // Rotation: accelerate slightly as it falls (tumble effect)
+    fallRotSpeed += fallTiltDir * 4 * dt; // gradual spin acceleration
+    fallRotation += fallRotSpeed * dt;
+    // Lateral drift
+    fallLateral += fallLateralSpeed * dt;
+    fallLateralSpeed += fallTiltDir * 30 * dt; // slight acceleration
+    // Fade out
+    fallOpacity = Math.max(0, 1 - fallDrop / 180);
+    if(fallDrop > 220){
       doGameOver();
     }
   }
